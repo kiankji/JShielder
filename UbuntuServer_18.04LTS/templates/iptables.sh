@@ -1,136 +1,186 @@
-#! /bin/sh
-### BEGIN INIT INFO
-# Provides:          iptables
-# Required-Start:    $remote_fs $syslog
-# Required-Stop:     $remote_fs $syslog
-# Default-Start:     2 3 4 5
-# Default-Stop:      0 1 6
-# Short-Description: Applies Iptable Rules
-# Description:
-### END INIT INFO
+#How to install ffmpeg
 
-iptables -F
+sudo apt-get install ffmpeg
+whereis ffprobe
 
-#Defaults
+ffprobe: /usr/bin/ffprobe /usr/share/man/man1/ffprobe.1.gz
+/usr/bin/ffprobe -> .env
 
-iptables -P INPUT DROP
-iptables -P FORWARD DROP
-iptables -P OUTPUT ACCEPT
-
-#Rules for PSAD
-
-iptables -A INPUT -j LOG
-iptables -A FORWARD -j LOG
-
-# INPUT
-
-# Aceptar loopback input
-
-iptables -A INPUT -i lo -p all -j ACCEPT
+whereis ffmpeg
+ffmpeg: /usr/bin/ffmpeg /usr/share/ffmpeg /usr/share/man/man1/ffmpeg.1.gz
 
 
+#Horizon 
+php artisan horizon
 
-# Allow three-way Handshake
+#Migration von Daten
 
-iptables -A INPUT -m state --state ESTABLISHED,RELATED -j ACCEPT
-
-
-
-# Stop Masked Attackes
-
-iptables -A INPUT -p icmp --icmp-type 13 -j DROP
-iptables -A INPUT -p icmp --icmp-type 17 -j DROP
-iptables -A INPUT -p icmp --icmp-type 14 -j DROP
-iptables -A INPUT -p icmp -m limit --limit 1/second -j ACCEPT
+php artisan migrate:refresh --seed
 
 
-# Discard invalid Packets
+#Queues
 
-iptables -A INPUT -m state --state INVALID -j DROP
-
-iptables -A FORWARD -m state --state INVALID -j DROP
-
-iptables -A OUTPUT -m state --state INVALID -j DROP
+php artisan queue:work --queue=video
+php artisan queue:work --queue=image
 
 
-### Drop Spoofing attacks
-iptables -A INPUT -s 10.0.0.0/8 -j DROP
-iptables -A INPUT -s 169.254.0.0/16 -j DROP
-iptables -A INPUT -s 172.16.0.0/12 -j DROP
-iptables -A INPUT -s 127.0.0.0/8 -j DROP
-iptables -A INPUT -s 192.168.0.0/24 -j DROP
+php artisan queue:work --queue=email
 
-iptables -A INPUT -s 224.0.0.0/4 -j DROP
-iptables -A INPUT -d 224.0.0.0/4 -j DROP
-iptables -A INPUT -s 240.0.0.0/5 -j DROP
-iptables -A INPUT -d 240.0.0.0/5 -j DROP
-iptables -A INPUT -s 0.0.0.0/8 -j DROP
-iptables -A INPUT -d 0.0.0.0/8 -j DROP
-iptables -A INPUT -d 239.255.255.0/24 -j DROP
-iptables -A INPUT -d 255.255.255.255 -j DROP
-
-# Drop packets with excessive RST to avoid Masked attacks
-
-iptables -A INPUT -p tcp -m tcp --tcp-flags RST RST -m limit --limit 2/second --limit-burst 2 -j ACCEPT
+#Löschen der Queue
+redis-cli
+FLUSHDB
 
 
+#Server
 
-# Any IP that performs a PortScan will be blocked for 24 hours
+##Installing Docker
+´´´
+apt install docker.io -y
+systemctl start docker
+systemctl enable docker
 
-iptables -A INPUT   -m recent --name portscan --rcheck --seconds 86400 -j DROP
+curl -L "https://github.com/docker/compose/releases/download/1.24.1/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
 
-iptables -A FORWARD -m recent --name portscan --rcheck --seconds 86400 -j DROP
+chmod +x /usr/local/bin/docker-compose
+mkdir /var/project
+
+´´´
+
+### List of all services
+service --status-all
+
+### Firewall
+
+´´´
+ufw reset
+ufw reload
+ufw allow www
+ufw allow ssh 
+ufw allow http
+ufw allow https
+ufw allow 22
+ufw allow 372
+ufw allow 372/tcp
+ufw allow 80
+ufw allow 80/tcp
+ufw allow 443
+ufw allow 443/tcp
+ufw allow 80/udp
+ufw allow 443/udp
+ufw allow from 89.163.132.113
+ufw deny 6379
+ufw default deny incoming 
+ufw reload
+ufw logging on
+ufw enable
+ufw reload
+´´´
+
+´´´
+ufw --force enable
+´´´
+### Fail2ban
+
+Status
+´´´
+fail2ban-client status
+´´´
+
+Status from Jail
+
+´´´
+fail2ban-client status <JAIL-NAME>
+´´´
+
+
+Unban
+´´´
+fail2ban-client set <JAIL-NAME> unbanip <IP-ADDRESS>
+´´´
+
+Ban IP
+´´´
+fail2ban-client set <JAIL-NAME> banip <IP-ADDRESS>
+´´´
+
+Blockedips
+´´´
+ iptables -L INPUT -v -n
+´´´
+
+### jShielder
+´´´
+cd /tmp
+git clone https://github.com/Jsitech/JShielder.git
+cd JShielder
+./jshielder.sh
+2
+6
+
+2
+3
+4
+6
+secrettalent
+ ssh-keygen -t rsa -b 4096
+ cat /home/secrettalent/.ssh/id_rsa.pub >> /home/secrettalent/.ssh/authorized_keys
+ ssh-copy-id -i /root/.ssh/id_rsa.pub secrettalent@152.89.107.153
+
+8
+19
+20
+21
+23
+25
+26
+
+iptables -A INPUT -p tcp --destination-port 8379 -j DROP
+service iptables save
+
+iptables -L
+
+
+ echo "iptables -A INPUT -p tcp -m tcp --dport $port -j ACCEPT" >> /etc/init.d/iptables.sh
+´´´
+
+### IPtables
+nano /etc/init.d/iptables.sh
+# Redis Server
+
+iptables -A INPUT -p tcp --destination-port 8379 -j DROP
+
+# TS Server / VPN
+
+iptables -A INPUT -s 89.163.132.113 -j ACCEPT
 
 
 
-# After 24 hours remove IP from block list
-
-iptables -A INPUT   -m recent --name portscan --remove
-
-iptables -A FORWARD -m recent --name portscan --remove
 
 
+### Fail2Ban
+nano /etc/fail2ban/jail.conf
+ignoreip = 127.0.0.1 89.163.132.113
 
-# This rule logs the port scan attempt
+/etc/init.d/fail2ban restart
 
-iptables -A INPUT   -p tcp -m tcp --dport 139 -m recent --name portscan --set -j LOG --log-prefix "Portscan:"
+#Docker
 
-iptables -A INPUT   -p tcp -m tcp --dport 139 -m recent --name portscan --set -j DROP
+docker-compose up -d caddy redis php-worker
 
+#Workspace
 
-
-iptables -A FORWARD -p tcp -m tcp --dport 139 -m recent --name portscan --set -j LOG --log-prefix "Portscan:"
-
-iptables -A FORWARD -p tcp -m tcp --dport 139 -m recent --name portscan --set -j DROP
-
-
-
-# Inbound Rules
-
-# smtp
-
-iptables -A INPUT -p tcp -m tcp --dport 25 -j ACCEPT
-
-# http
-
-iptables -A INPUT -p tcp -m tcp --dport 80 -j ACCEPT
-
-# https
-
-iptables -A INPUT -p tcp -m tcp --dport 443 -j ACCEPT
-
-# ssh & sftp
-
-iptables -A INPUT -p tcp -m tcp --dport 372 -j ACCEPT
+docker-compose exec workspace bash
+composer install --optimize-autoloader --no-dev
+php artisan config:cache
+php artisan route:cache
+php artisan key:generate
+npm install
+npm run prod
 
 
 
-# Allow Ping
+#Future:
+Nginx statt caddy dafür mit lets encrypt 
 
-iptables -A INPUT -p icmp --icmp-type 0 -j ACCEPT
 
-
-# Limit SSH connection from a single IP
-
-iptables -A INPUT -p tcp --syn --dport 372 -m connlimit --connlimit-above 2 -j REJECT
 
